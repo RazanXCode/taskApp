@@ -15,6 +15,20 @@
         .filter-container {
             margin-bottom: 20px;
         }
+        #list-output {
+            list-style-type: none;
+            padding: 0;
+        }
+        #list-output li {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            cursor: grab;
+        }
+        #list-output li.dragging {
+            opacity: 0.5;
+        }
     </style>
 </head>
 <body>
@@ -43,6 +57,7 @@
         const UPDATE_TASK = 'UPDATE_TASK';
         const DELETE_TASK = 'DELETE_TASK';
         const TOGGLE_TASK = 'TOGGLE_TASK';
+        const REORDER_TASKS = 'REORDER_TASKS';
 
         // Action Creators
         const fetchTasks = (tasks) => ({ type: FETCH_TASKS, payload: tasks });
@@ -50,6 +65,7 @@
         const updateTask = (id, updatedTask) => ({ type: UPDATE_TASK, payload: { id, updatedTask } });
         const deleteTask = (id) => ({ type: DELETE_TASK, payload: id });
         const toggleTask = (id) => ({ type: TOGGLE_TASK, payload: id });
+        const reorderTasks = (startIndex, endIndex) => ({ type: REORDER_TASKS, payload: { startIndex, endIndex } });
 
         // Reducer
         const tasksReducer = (state = [], action) => {
@@ -68,6 +84,12 @@
                     return state.map(task =>
                         task.id === action.payload ? { ...task, completed: !task.completed } : task
                     );
+                case REORDER_TASKS:
+                    const { startIndex, endIndex } = action.payload;
+                    const tasks = [...state];
+                    const [movedTask] = tasks.splice(startIndex, 1);
+                    tasks.splice(endIndex, 0, movedTask);
+                    return tasks;
                 default:
                     return state;
             }
@@ -101,9 +123,11 @@
                 return true; // Show all tasks
             });
 
-            filteredTasks.forEach(task => {
+            filteredTasks.forEach((task, index) => {
                 const listItem = document.createElement('li');
                 listItem.textContent = task.title;
+                listItem.draggable = true; // Make the task draggable
+                listItem.dataset.index = index; // Store the task index for drag-and-drop
 
                 // Add a checkbox to toggle task completion
                 const checkbox = document.createElement('input');
@@ -134,6 +158,52 @@
                 listItem.appendChild(updateButton);
                 listItem.appendChild(deleteButton);
                 listOutput.appendChild(listItem);
+            });
+
+            // Add drag-and-drop event listeners
+            addDragAndDropListeners();
+        };
+
+        // Add drag-and-drop event listeners
+        const addDragAndDropListeners = () => {
+            const listItems = document.querySelectorAll('#list-output li');
+
+            let draggedItem = null;
+
+            listItems.forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedItem = item;
+                    item.classList.add('dragging');
+                    e.dataTransfer.setData('text/plain', item.dataset.index);
+                });
+
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    const target = e.target.closest('li');
+                    if (target && target !== draggedItem) {
+                        const rect = target.getBoundingClientRect();
+                        const next = e.clientY > rect.top + rect.height / 2;
+                        listItems.forEach(li => li.style.border = 'none');
+                        target.style.borderBottom = next ? '2px solid #000' : '2px solid #000';
+                        target.style.borderTop = next ? 'none' : '2px solid #000';
+                    }
+                });
+
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const target = e.target.closest('li');
+                    if (target && target !== draggedItem) {
+                        const startIndex = parseInt(draggedItem.dataset.index);
+                        const endIndex = parseInt(target.dataset.index);
+                        store.dispatch(reorderTasks(startIndex, endIndex));
+                    }
+                    listItems.forEach(li => li.style.border = 'none');
+                });
+
+                item.addEventListener('dragend', () => {
+                    draggedItem.classList.remove('dragging');
+                    draggedItem = null;
+                });
             });
         };
 
